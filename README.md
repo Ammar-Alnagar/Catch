@@ -28,13 +28,13 @@ With `catch`, you no longer need to write complex `CMakeLists.txt` boilerplate b
 
 ## Features
 
-- 🚀 **Cargo-like Workflow**: Simple CLI for creating, building, running, testing, and cleaning C++ projects.
-- ⚙️ **Declarative Configuration**: Manage all settings in `catch.toml` without touching `CMakeLists.txt`.
-- 📦 **Git Dependency Management**: Add git dependencies with precise refs (`--tag`, `--branch`, `--rev`), target overrides, and deterministic locking (`catch.lock`).
-- 🧪 **Built-in Testing**: Automated CTest test suite generation for files placed under `tests/*.cpp`.
-- ⚡ **CUDA & LLVM/MLIR Support**: First-class flags for GPU acceleration and compiler construction.
-- 📚 **Doc Generation**: Extract project layout, settings, targets, and dependencies directly into `docs/PROJECT.md`.
-- 🩺 **Doctor Diagnostic**: Quickly verify system dependencies (`cmake`, `ninja`, `git`, `nvcc`) and configured LLVM/MLIR directory paths.
+- **Cargo-like Workflow**: Simple CLI for creating, building, running, testing, and cleaning C++ projects.
+- **Declarative Configuration**: Manage all settings in `catch.toml` without touching `CMakeLists.txt`.
+- **Git Dependency Management**: Add git dependencies with precise refs (`--tag`, `--branch`, `--rev`), target overrides, and deterministic locking (`catch.lock`).
+- **Built-in Testing**: Automated CTest test suite generation for files placed under `tests/*.cpp`.
+- **CUDA & LLVM/MLIR Support**: First-class flags for GPU acceleration and compiler construction.
+- **Doc Generation**: Extract project layout, settings, targets, and dependencies directly into `docs/PROJECT.md`.
+- **Doctor Diagnostic**: Quickly verify system dependencies (`cmake`, `ninja`, `git`, `nvcc`) and configured LLVM/MLIR directory paths.
 
 ---
 
