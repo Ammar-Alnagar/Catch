@@ -22,6 +22,11 @@ const TOOLS: &[ToolInfo] = &[
         required: false,
     },
     ToolInfo {
+        name: "ccache",
+        desc: "Optional compiler cache for fast incremental compilation.",
+        required: false,
+    },
+    ToolInfo {
         name: "git",
         desc: "Required for managing and fetching git dependencies.",
         required: true,
