@@ -124,7 +124,8 @@ pub fn generate_cmakelists(config: &CatchConfig, project_dir: &Path, lock_data: 
             lines.push("set(BUILD_TESTS OFF CACHE BOOL \"\" FORCE)".to_string());
 
             // Dependency-specific automatic fixes (e.g. CUTLASS)
-            if dep_name.to_lowercase() == "cutlass" || dep.git.to_lowercase().contains("cutlass") {
+            let is_cutlass = dep_name.to_lowercase() == "cutlass" || dep.git.to_lowercase().contains("cutlass");
+            if is_cutlass {
                 lines.push("set(CUTLASS_ENABLE_HEADERS_ONLY ON CACHE BOOL \"\" FORCE)".to_string());
                 lines.push("set(CUTLASS_ENABLE_TESTS OFF CACHE BOOL \"\" FORCE)".to_string());
                 lines.push("set(CUTLASS_ENABLE_EXAMPLES OFF CACHE BOOL \"\" FORCE)".to_string());
@@ -143,6 +144,18 @@ pub fn generate_cmakelists(config: &CatchConfig, project_dir: &Path, lock_data: 
             lines.push(format!("elseif(TARGET {})\n  set({}_LINK_TARGET \"{}\")", dep_name, dep_name, dep_name));
             lines.push(format!("else()\n  message(WARNING \"Target '{}' or '{}' for dependency '{}' not found after configure.\")", target, dep_name, dep_name));
             lines.push(format!("  set({}_LINK_TARGET \"{}\")\nendif()", dep_name, target));
+
+            if is_cutlass {
+                lines.push(format!(
+                    "if(EXISTS \"${{{}_SOURCE_DIR}}/tools/util/include\")\n  include_directories(${{({}_SOURCE_DIR)}}/tools/util/include)\nendif()",
+                    dep_name, dep_name
+                ).replace("${(", "${"));
+                lines.push(format!(
+                    "if(EXISTS \"${{{}_SOURCE_DIR}}/tools/library/include\")\n  include_directories(${{({}_SOURCE_DIR)}}/tools/library/include)\nendif()",
+                    dep_name, dep_name
+                ).replace("${(", "${"));
+            }
+
             lines.push("".to_string());
         }
     }
