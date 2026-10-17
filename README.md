@@ -659,10 +659,17 @@ catch docs
 ### Extracted Functions & Symbols
 
 #### `src/main.cpp` (32 lines, 920 B)
-- **Class** `Calculator`: `class Calculator` *(line 8)*
-  - *Doc*: Calculator class providing arithmetic operations.
-- **Function** `main`: `int main(int argc, char* argv[])` *(line 20)*
-  - *Doc*: Entry point of the application.
+- **Class** `Calculator` *(line 8)*:
+```cpp
+class Calculator
+```
+  *Doc*: Calculator class providing arithmetic operations.
+
+- **Function** `main` *(line 20)*:
+```cpp
+int main(int argc, char* argv[])
+```
+  *Doc*: Entry point of the application.
 
 ## Build Commands
 Commands run by `catch` for this project:

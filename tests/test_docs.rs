@@ -110,11 +110,15 @@ double compute_circumference(double radius);
     // Code Analysis & Extracted Symbols
     assert!(doc.contains("## Source Code Analysis & API Overview"));
     assert!(doc.contains("### Extracted Functions & Symbols"));
-    assert!(doc.contains("- **Struct** `Point`: `struct Point`"));
+    assert!(doc.contains("- **Struct** `Point`"));
+    assert!(doc.contains("```cpp\nstruct Point\n```"));
     assert!(doc.contains("*Doc*: Point representation in 2D space."));
-    assert!(doc.contains("- **Class** `Calculator`: `class Calculator`"));
-    assert!(doc.contains("- **Function** `main`: `int main(int argc, char* argv[])`"));
+    assert!(doc.contains("- **Class** `Calculator`"));
+    assert!(doc.contains("```cpp\nclass Calculator\n```"));
+    assert!(doc.contains("- **Function** `main`"));
+    assert!(doc.contains("```cpp\nint main(int argc, char* argv[])\n```"));
     assert!(doc.contains("*Doc*: Entry point of the math engine."));
-    assert!(doc.contains("- **Function** `compute_circumference`: `double compute_circumference(double radius)`"));
+    assert!(doc.contains("- **Function** `compute_circumference`"));
+    assert!(doc.contains("```cpp\ndouble compute_circumference(double radius)\n```"));
     assert!(doc.contains("*Doc*: Compute circumference given radius"));
 }

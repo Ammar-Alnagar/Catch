@@ -732,15 +732,18 @@ pub fn generate_docs(project_dir: &Path) -> Result<String> {
                 ));
                 for sym in &fa.symbols {
                     lines.push(format!(
-                        "- **{}** `{}`: `{}` *(line {})*",
+                        "- **{}** `{}` *(line {})*:",
                         sym.kind.as_str(),
                         sym.name,
-                        sym.signature,
                         sym.line
                     ));
+                    lines.push("```cpp".to_string());
+                    lines.push(sym.signature.clone());
+                    lines.push("```".to_string());
                     if let Some(ref doc) = sym.doc {
-                        lines.push(format!("  - *Doc*: {}", doc));
+                        lines.push(format!("  *Doc*: {}", doc));
                     }
+                    lines.push("".to_string());
                 }
             }
         }
