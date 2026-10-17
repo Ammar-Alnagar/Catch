@@ -98,7 +98,10 @@ def test_docs_and_doctor(tmp_path):
 
     res = run_catch(["docs"], cwd=proj_dir)
     assert res.returncode == 0
-    assert (proj_dir / "docs" / "PROJECT.md").exists()
+    doc_content = (proj_dir / "docs" / "PROJECT.md").read_text(encoding="utf-8")
+    assert "Project Details & Code Metrics" in doc_content
+    assert "Source Code Analysis & API Overview" in doc_content
+    assert "main" in doc_content
 
     res = run_catch(["doctor"], cwd=proj_dir)
     assert res.returncode == 0
