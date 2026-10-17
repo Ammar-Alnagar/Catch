@@ -146,14 +146,15 @@ pub fn generate_cmakelists(config: &CatchConfig, project_dir: &Path, lock_data: 
             lines.push(format!("  set({}_LINK_TARGET \"{}\")\nendif()", dep_name, target));
 
             if is_cutlass {
+                // ${name_SOURCE_DIR} is written as ${{{}_SOURCE_DIR}} so the braces survive format!.
                 lines.push(format!(
-                    "if(EXISTS \"${{{}_SOURCE_DIR}}/tools/util/include\")\n  include_directories(${{({}_SOURCE_DIR)}}/tools/util/include)\nendif()",
+                    "if(EXISTS \"${{{}_SOURCE_DIR}}/tools/util/include\")\n  include_directories(${{{}_SOURCE_DIR}}/tools/util/include)\nendif()",
                     dep_name, dep_name
-                ).replace("${(", "${"));
+                ));
                 lines.push(format!(
-                    "if(EXISTS \"${{{}_SOURCE_DIR}}/tools/library/include\")\n  include_directories(${{({}_SOURCE_DIR)}}/tools/library/include)\nendif()",
+                    "if(EXISTS \"${{{}_SOURCE_DIR}}/tools/library/include\")\n  include_directories(${{{}_SOURCE_DIR}}/tools/library/include)\nendif()",
                     dep_name, dep_name
-                ).replace("${(", "${"));
+                ));
             }
 
             lines.push("".to_string());

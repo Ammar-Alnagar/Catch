@@ -38,3 +38,37 @@ languages = ["CXX"]
     assert!(cmake_out.contains("add_executable(myproj)"));
     assert!(cmake_out.contains("src/main.cpp"));
 }
+
+#[test]
+fn test_cutlass_include_dirs_are_valid_cmake() {
+    let tmp_dir = TempDir::new().unwrap();
+    let project_dir = tmp_dir.path().join("gemm");
+    std::fs::create_dir_all(project_dir.join("src")).unwrap();
+    std::fs::write(project_dir.join("src/main.cpp"), "int main(){}\n").unwrap();
+
+    let toml_content = r#"[package]
+name = "gemm"
+version = "0.1.0"
+type = "bin"
+
+[build]
+std = "17"
+languages = ["CXX", "CUDA"]
+
+[dependencies.cutlass]
+git = "https://github.com/NVIDIA/cutlass.git"
+tag = "v3.5.1"
+"#;
+    std::fs::write(project_dir.join("catch.toml"), toml_content).unwrap();
+
+    let cfg = parse_config(&project_dir.join("catch.toml")).unwrap();
+    let cmake_out = generate_cmakelists(&cfg, &project_dir, None);
+
+    assert!(cmake_out.contains(
+        "if(EXISTS \"${cutlass_SOURCE_DIR}/tools/util/include\")\n  include_directories(${cutlass_SOURCE_DIR}/tools/util/include)\nendif()"
+    ));
+    assert!(cmake_out.contains(
+        "if(EXISTS \"${cutlass_SOURCE_DIR}/tools/library/include\")\n  include_directories(${cutlass_SOURCE_DIR}/tools/library/include)\nendif()"
+    ));
+    assert!(!cmake_out.contains("SOURCE_DIR)}"));
+}
