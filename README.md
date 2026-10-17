@@ -1,6 +1,6 @@
 # Catch: Cargo-like C++ Build Tool
 
-`catch` is a simple, modern, Cargo-like command-line tool for C++ projects that wraps CMake and Ninja. It enables C++ developers to declare project settings, build options, external dependencies, CUDA options, and LLVM/MLIR integration exclusively through a single `catch.toml` file.
+`catch` is a simple, modern, Cargo-like command-line tool for C++ projects written in Rust that wraps CMake and Ninja. It enables C++ developers to declare project settings, build options, external dependencies, CUDA options, and LLVM/MLIR integration exclusively through a single `catch.toml` file.
 
 With `catch`, you no longer need to write complex `CMakeLists.txt` boilerplate by hand. `catch` automatically generates clean, standard `CMakeLists.txt` files and manages build, run, test, dependency locking, documentation generation, and environment diagnostics workflows.
 
@@ -42,22 +42,22 @@ With `catch`, you no longer need to write complex `CMakeLists.txt` boilerplate b
 
 ### Requirements
 
-- Python 3.10+
+- Rust (Cargo) 1.70+
 - CMake 3.20+
 - Ninja (optional, recommended)
 - Git (for dependency management)
 
 ### Install Locally
 
-Clone the repository and install in editable mode:
+Clone the repository and install using `cargo`:
 
 ```sh
 git clone https://github.com/your-org/catch.git
 cd catch
-pip install -e .
+cargo install --path .
 ```
 
-This registers the `catch` executable globally on your system PATH.
+This compiles and registers the `catch` executable globally on your system PATH.
 
 ---
 
