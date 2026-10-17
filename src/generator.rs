@@ -44,6 +44,7 @@ pub fn generate_cmakelists(config: &CatchConfig, project_dir: &Path, lock_data: 
 
     // CUDA settings
     if config.build.languages.contains(&"CUDA".to_string()) {
+        lines.push("find_package(CUDAToolkit REQUIRED)".to_string());
         if let Some(ref cuda) = config.cuda {
             lines.push("enable_language(CUDA)".to_string());
             lines.push(format!("set(CMAKE_CUDA_STANDARD {})", cuda.std));
