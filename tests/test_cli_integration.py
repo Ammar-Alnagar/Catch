@@ -103,3 +103,56 @@ def test_docs_and_doctor(tmp_path):
     res = run_catch(["doctor"], cwd=proj_dir)
     assert res.returncode == 0
     assert "Running catch doctor diagnostic check" in res.stdout
+
+def test_cmake_existing_project(tmp_path):
+    cmake_dir = tmp_path / "standalone_cmake"
+    cmake_dir.mkdir()
+
+    (cmake_dir / "CMakeLists.txt").write_text("""cmake_minimum_required(VERSION 3.20)
+project(standalone_app CXX)
+add_executable(standalone_app main.cpp)
+""")
+    (cmake_dir / "main.cpp").write_text("""#include <iostream>
+int main() {
+    std::cout << "Standalone CMake works!" << std::endl;
+    return 0;
+}
+""")
+
+    # Run catch cmake inside the existing cmake directory (no catch.toml)
+    res = run_catch(["cmake"], cwd=cmake_dir)
+    assert res.returncode == 0
+    assert "Detected CMakeLists.txt" in res.stdout
+    assert "Build completed successfully." in res.stdout
+
+    # Verify build artifacts
+    exe_path = cmake_dir / "build" / "standalone_app"
+    assert exe_path.exists()
+    out = subprocess.run([str(exe_path)], capture_output=True, text=True, check=True)
+    assert "Standalone CMake works!" in out.stdout
+
+def test_cmake_nested_invocation_and_path_arg(tmp_path):
+    cmake_dir = tmp_path / "nested_cmake"
+    cmake_dir.mkdir()
+    sub_src = cmake_dir / "src" / "deep"
+    sub_src.mkdir(parents=True)
+
+    (cmake_dir / "CMakeLists.txt").write_text("""cmake_minimum_required(VERSION 3.20)
+project(nested_app CXX)
+add_executable(nested_app main.cpp)
+""")
+    (cmake_dir / "main.cpp").write_text("""int main() { return 0; }""")
+
+    # 1. Run from nested subfolder without arguments: should detect parent's CMakeLists.txt
+    res = run_catch(["cmake"], cwd=sub_src)
+    assert res.returncode == 0
+    assert "Detected CMakeLists.txt" in res.stdout
+    assert (cmake_dir / "build" / "nested_app").exists()
+
+    # 2. Run from parent directory specifying path explicitly
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    res2 = run_catch(["cmake", str(cmake_dir)], cwd=other_dir)
+    assert res2.returncode == 0
+    assert "Detected CMakeLists.txt" in res2.stdout
+

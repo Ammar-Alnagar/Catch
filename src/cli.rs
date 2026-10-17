@@ -1,7 +1,7 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use which::which;
 
 use crate::config::{parse_config, CatchConfig};
@@ -102,6 +102,30 @@ pub enum Commands {
 
     #[command(about = "Check system toolchain dependencies")]
     Doctor,
+
+    #[command(about = "Detect an existing CMakeLists.txt and build it with CMake")]
+    Cmake {
+        #[arg(
+            help = "Path to directory containing CMakeLists.txt or CMakeLists.txt itself (defaults to current directory)"
+        )]
+        path: Option<String>,
+
+        #[arg(long, help = "Build in Release mode")]
+        release: bool,
+
+        #[arg(short, long, help = "Build a specific target")]
+        target: Option<String>,
+
+        #[arg(long, default_value = "build", help = "Build directory")]
+        build_dir: String,
+
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Additional arguments passed to CMake configure"
+        )]
+        args: Vec<String>,
+    },
 }
 
 pub fn is_tool_available(name: &str) -> bool {
@@ -454,5 +478,164 @@ pub fn cmd_update(dep_name: Option<&str>) -> Result<()> {
     let project_dir = std::env::current_dir()?;
     update_lock_for_project(&project_dir, dep_name)?;
     println!("Updated catch.lock");
+    Ok(())
+}
+
+pub fn find_cmakelists_in(base_dir: &Path, start_path: Option<&str>) -> Result<PathBuf> {
+    if let Some(p) = start_path {
+        let path = if Path::new(p).is_absolute() {
+            PathBuf::from(p)
+        } else {
+            base_dir.join(p)
+        };
+
+        if path.is_file() {
+            if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.eq_ignore_ascii_case("cmakelists.txt"))
+                .unwrap_or(false)
+            {
+                return Ok(path);
+            }
+        } else if path.is_dir() {
+            let candidate = path.join("CMakeLists.txt");
+            if candidate.exists() {
+                return Ok(candidate);
+            }
+            if let Ok(entries) = path.read_dir() {
+                for entry in entries.flatten() {
+                    if entry
+                        .file_name()
+                        .to_string_lossy()
+                        .eq_ignore_ascii_case("cmakelists.txt")
+                    {
+                        return Ok(entry.path());
+                    }
+                }
+            }
+        }
+        bail!("No CMakeLists.txt found at '{}'.", p);
+    }
+
+    // Traverse upwards from base_dir
+    let mut curr: Option<&Path> = Some(base_dir);
+    while let Some(dir) = curr {
+        let candidate = dir.join("CMakeLists.txt");
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+        if let Ok(entries) = dir.read_dir() {
+            for entry in entries.flatten() {
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case("cmakelists.txt")
+                {
+                    return Ok(entry.path());
+                }
+            }
+        }
+        curr = dir.parent();
+    }
+
+    bail!(
+        "No CMakeLists.txt found in '{}' or any parent directories.",
+        base_dir.display()
+    );
+}
+
+pub fn find_cmakelists(start_path: Option<&str>) -> Result<PathBuf> {
+    let cwd = std::env::current_dir()?;
+    find_cmakelists_in(&cwd, start_path)
+}
+
+pub fn cmd_cmake(
+    path: Option<String>,
+    release: bool,
+    target: Option<String>,
+    build_dir: String,
+    args: Vec<String>,
+    verbose: bool,
+) -> Result<()> {
+    if !is_tool_available("cmake") {
+        eprintln!("Error: 'cmake' executable not found in PATH.");
+        std::process::exit(1);
+    }
+
+    let cmakelists_path = match find_cmakelists(path.as_deref()) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let source_dir = cmakelists_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+
+    println!("Detected CMakeLists.txt at {}", cmakelists_path.display());
+
+    let build_dir_path = if Path::new(&build_dir).is_absolute() {
+        PathBuf::from(&build_dir)
+    } else {
+        source_dir.join(&build_dir)
+    };
+
+    let build_type = if release { "Release" } else { "Debug" };
+
+    let mut configure_cmd = vec![
+        "cmake".to_string(),
+        "-S".to_string(),
+        source_dir.to_string_lossy().to_string(),
+        "-B".to_string(),
+        build_dir_path.to_string_lossy().to_string(),
+    ];
+
+    if is_tool_available("ninja") {
+        configure_cmd.push("-G".to_string());
+        configure_cmd.push("Ninja".to_string());
+    }
+
+    configure_cmd.push(format!("-DCMAKE_BUILD_TYPE={}", build_type));
+    configure_cmd.push("-DCMAKE_EXPORT_COMPILE_COMMANDS=ON".to_string());
+
+    let extra_args = if !args.is_empty() && args[0] == "--" {
+        &args[1..]
+    } else {
+        &args[..]
+    };
+    for arg in extra_args {
+        configure_cmd.push(arg.clone());
+    }
+
+    println!("Configuring CMake project (build type: {})...", build_type);
+    if run_command(&configure_cmd, Some(&source_dir), verbose, true, false).is_err() {
+        std::process::exit(1);
+    }
+
+    let mut build_cmd = vec![
+        "cmake".to_string(),
+        "--build".to_string(),
+        build_dir_path.to_string_lossy().to_string(),
+        "--config".to_string(),
+        build_type.to_string(),
+    ];
+
+    if let Some(ref tgt) = target {
+        build_cmd.push("--target".to_string());
+        build_cmd.push(tgt.clone());
+        println!("Building target '{}'...", tgt);
+    } else {
+        println!("Building project...");
+    }
+
+    if run_command(&build_cmd, Some(&source_dir), verbose, true, false).is_err() {
+        std::process::exit(1);
+    }
+
+    println!("Build completed successfully.");
     Ok(())
 }

@@ -11,7 +11,8 @@ use anyhow::Result;
 use clap::Parser;
 
 use cli::{
-    cmd_add, cmd_build, cmd_clean, cmd_new, cmd_remove, cmd_run, cmd_test, cmd_update, Cli, Commands,
+    cmd_add, cmd_build, cmd_clean, cmd_cmake, cmd_new, cmd_remove, cmd_run, cmd_test, cmd_update,
+    Cli, Commands,
 };
 use docs::cmd_docs;
 use doctor::cmd_doctor;
@@ -57,6 +58,15 @@ fn main() -> Result<()> {
         }
         Some(Commands::Doctor) => {
             cmd_doctor()?;
+        }
+        Some(Commands::Cmake {
+            path,
+            release,
+            target,
+            build_dir,
+            args,
+        }) => {
+            cmd_cmake(path, release, target, build_dir, args, verbose)?;
         }
         None => {
             use clap::CommandFactory;

@@ -153,6 +153,7 @@ pub fn generate_docs(project_dir: &Path) -> Result<String> {
     lines.push("- `catch update [name]`: Re-resolves git dependency commit hashes in catch.lock.".to_string());
     lines.push("- `catch docs [--stdout]`: Generates docs/PROJECT.md documentation.".to_string());
     lines.push("- `catch doctor`: Checks for required toolchain dependencies and system setup.".to_string());
+    lines.push("- `catch cmake [path] [--release] [--target <name>]`: Detects an existing CMakeLists.txt and builds it with CMake.".to_string());
 
     Ok(lines.join("\n") + "\n")
 }

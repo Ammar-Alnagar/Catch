@@ -22,6 +22,7 @@ With `catch`, you no longer need to write complex `CMakeLists.txt` boilerplate b
   - [6. LLVM and MLIR Compiler Projects (`catch new --mlir`)](#6-llvm-and-mlir-compiler-projects-catch-new---mlir)
   - [7. Automated Markdown Documentation Generation (`catch docs`)](#7-automated-markdown-documentation-generation-catch-docs)
   - [8. System Toolchain Diagnostic Check (`catch doctor`)](#8-system-toolchain-diagnostic-check-catch-doctor)
+  - [9. Building Existing CMake Projects (`catch cmake`)](#9-building-existing-cmake-projects-catch-cmake)
 - [License](#license)
 
 ---
@@ -30,6 +31,7 @@ With `catch`, you no longer need to write complex `CMakeLists.txt` boilerplate b
 
 - **Cargo-like Workflow**: Simple CLI for creating, building, running, testing, and cleaning C++ projects.
 - **Declarative Configuration**: Manage all settings in `catch.toml` without touching `CMakeLists.txt`.
+- **Existing CMake Support**: Detect and build existing CMake projects (`catch cmake`) without requiring `catch.toml`.
 - **Git Dependency Management**: Add git dependencies with precise refs (`--tag`, `--branch`, `--rev`), target overrides, and deterministic locking (`catch.lock`).
 - **Built-in Testing**: Automated CTest test suite generation for files placed under `tests/*.cpp`.
 - **CUDA & LLVM/MLIR Support**: First-class flags for GPU acceleration and compiler construction.
@@ -130,6 +132,14 @@ Generates Markdown project documentation summarizing metadata, source layout, ta
 
 ### `catch doctor`
 Runs diagnostic checks on required and optional tools (`cmake`, `ninja`, `git`, `nvcc`) and validates configured LLVM/MLIR build paths.
+
+### `catch cmake [path] [--release] [-t, --target <name>] [--build-dir <dir>] [-- <cmake_args...>]`
+Detects an existing `CMakeLists.txt` (in current directory, parent directories, or specified path) and builds it using CMake and Ninja without requiring `catch.toml`.
+- `path`: Path to directory containing `CMakeLists.txt` or `CMakeLists.txt` file itself (defaults to current directory, traversing upwards if not found).
+- `--release`: Compiles in Release mode (`CMAKE_BUILD_TYPE=Release`).
+- `-t`, `--target`: Specific CMake target to compile.
+- `--build-dir`: Build output directory (default: `build`).
+- `-- <cmake_args...>`: Arbitrary extra arguments passed directly to CMake configuration.
 
 ---
 
@@ -667,6 +677,30 @@ Checking [llvm] configuration from catch.toml...
 [✓] MLIR_DIR  : FOUND (/usr/lib/cmake/mlir)
 
 All required toolchain components are ready.
+```
+
+---
+
+### 9. Building Existing CMake Projects (`catch cmake`)
+
+`catch cmake` allows you to seamlessly build existing CMake projects that already have their own `CMakeLists.txt`, without needing a `catch.toml` file. It automatically discovers the `CMakeLists.txt` in the current directory or traverses parent directories, configures with Ninja (if available), and compiles your targets.
+
+#### Basic Usage:
+```sh
+# Build the CMake project in the current directory (or nearest parent directory)
+catch cmake
+
+# Build in Release mode
+catch cmake --release
+
+# Build a specific target
+catch cmake --target my_target
+
+# Build a project located in another folder
+catch cmake ./libs/my_legacy_project
+
+# Pass custom CMake configuration arguments
+catch cmake -- -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DENABLE_CUSTOM_FEATURE=ON
 ```
 
 ---
