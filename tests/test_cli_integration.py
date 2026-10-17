@@ -35,6 +35,18 @@ def test_cli_new_build_run_clean(tmp_path):
     assert res.returncode == 0
     assert not (demo_dir / "build").exists()
 
+def test_cli_new_cuda_single_source(tmp_path):
+    res = run_catch(["new", "cuda_app", "--cuda"], cwd=tmp_path)
+    assert res.returncode == 0
+
+    src = tmp_path / "cuda_app" / "src"
+    assert (src / "main.cu").exists()
+    assert not (src / "main.cpp").exists()
+    assert not (src / "kernel.cu").exists()
+    source = (src / "main.cu").read_text(encoding="utf-8")
+    assert "int main()" in source
+    assert "hello_kernel<<<1, 1>>>()" in source
+
 def test_cli_test_command(tmp_path):
     run_catch(["new", "test_proj"], cwd=tmp_path)
     proj_dir = tmp_path / "test_proj"

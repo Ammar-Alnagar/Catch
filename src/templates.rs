@@ -30,16 +30,17 @@ int main() {
 }
 "#;
 
-pub const KERNEL_CU_TEMPLATE: &str = r#"#include <iostream>
+pub const MAIN_CU_TEMPLATE: &str = r#"#include <cstdio>
 #include <cuda_runtime.h>
 
 __global__ void hello_kernel() {
-    // CUDA Kernel
+    printf("Hello from GPU thread %d\n", threadIdx.x);
 }
 
-void run_kernel() {
+int main() {
     hello_kernel<<<1, 1>>>();
     cudaDeviceSynchronize();
+    return 0;
 }
 "#;
 

@@ -90,7 +90,7 @@ catch docs
 
 ### `catch new <name> [--cuda] [--mlir] [--force]`
 Creates a new C++ project in a directory named `<name>`.
-- `--cuda`: Configures the project for CUDA support (adds `CUDA` language, `[cuda]` section, and sample `src/kernel.cu`).
+- `--cuda`: Configures the project for CUDA support (adds `CUDA` language, `[cuda]` section, and a single `src/main.cu`).
 - `--mlir`: Configures the project for LLVM/MLIR support (adds `[llvm]` section and MLIR context template).
 - `--force`, `-f`: Overwrites existing files in the directory without interactive confirmation.
 
@@ -479,8 +479,7 @@ cuda_app/
 ├── catch.toml
 ├── .gitignore
 └── src/
-    ├── main.cpp
-    └── kernel.cu
+    └── main.cu
 ```
 
 #### Configured `catch.toml`:
@@ -503,18 +502,19 @@ std = "17"
 flags = []
 ```
 
-#### Sample Kernel Code (`src/kernel.cu`):
+#### Sample program (`src/main.cu`):
 ```cuda
-#include <iostream>
+#include <cstdio>
 #include <cuda_runtime.h>
 
 __global__ void hello_kernel() {
-    printf("Hello from GPU thread %d!\n", threadIdx.x);
+    printf("Hello from GPU thread %d\n", threadIdx.x);
 }
 
-void run_kernel() {
-    hello_kernel<<<1, 4>>>();
+int main() {
+    hello_kernel<<<1, 1>>>();
     cudaDeviceSynchronize();
+    return 0;
 }
 ```
 

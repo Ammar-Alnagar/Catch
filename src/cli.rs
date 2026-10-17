@@ -171,12 +171,10 @@ pub fn cmd_new(name: &str, cuda: bool, mlir: bool, force: bool) -> Result<()> {
 
     if mlir {
         std::fs::write(src_dir.join("main.cpp"), templates::MLIR_MAIN_CPP_TEMPLATE)?;
+    } else if cuda {
+        std::fs::write(src_dir.join("main.cu"), templates::MAIN_CU_TEMPLATE)?;
     } else {
         std::fs::write(src_dir.join("main.cpp"), templates::MAIN_CPP_TEMPLATE)?;
-    }
-
-    if cuda {
-        std::fs::write(src_dir.join("kernel.cu"), templates::KERNEL_CU_TEMPLATE)?;
     }
 
     println!("Created catch project '{}'.", name);
