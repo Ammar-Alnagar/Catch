@@ -1,8 +1,4 @@
-"""
-Code templates for `catch new`
-"""
-
-CATCH_TOML_TEMPLATE = """[package]
+pub const CATCH_TOML_TEMPLATE: &str = r#"[package]
 name = "{name}"
 version = "0.1.0"
 type = "bin"
@@ -13,17 +9,17 @@ flags = []
 defines = []
 release_flags = ["-O2"]
 languages = {languages}
-{cuda_section}{llvm_section}"""
+{cuda_section}{llvm_section}"#;
 
-MAIN_CPP_TEMPLATE = """#include <iostream>
+pub const MAIN_CPP_TEMPLATE: &str = r#"#include <iostream>
 
 int main() {
     std::cout << "Hello, World!" << std::endl;
     return 0;
 }
-"""
+"#;
 
-MLIR_MAIN_CPP_TEMPLATE = """#include "mlir/IR/MLIRContext.h"
+pub const MLIR_MAIN_CPP_TEMPLATE: &str = r#"#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/BuiltinOps.h"
 #include <iostream>
 
@@ -32,9 +28,9 @@ int main() {
     std::cout << "MLIR Context initialized successfully!" << std::endl;
     return 0;
 }
-"""
+"#;
 
-KERNEL_CU_TEMPLATE = """#include <iostream>
+pub const KERNEL_CU_TEMPLATE: &str = r#"#include <iostream>
 #include <cuda_runtime.h>
 
 __global__ void hello_kernel() {
@@ -45,13 +41,13 @@ void run_kernel() {
     hello_kernel<<<1, 1>>>();
     cudaDeviceSynchronize();
 }
-"""
+"#;
 
-GITIGNORE_TEMPLATE = """build/
+pub const GITIGNORE_TEMPLATE: &str = r#"build/
 .cache/
 *.o
 *.a
 *.so
 *.dylib
 *.exe
-"""
+"#;
