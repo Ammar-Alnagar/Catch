@@ -113,7 +113,7 @@ pub fn infer_dep_name_from_url(url: &str) -> String {
     if cleaned.ends_with(".git") {
         cleaned = &cleaned[..cleaned.len() - 4];
     }
-    let name = cleaned.split('/').last().unwrap_or("dep");
+    let name = cleaned.split('/').next_back().unwrap_or("dep");
     if name.is_empty() {
         "dep".to_string()
     } else {

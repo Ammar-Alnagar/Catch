@@ -34,7 +34,7 @@ pub fn resolve_git_commit(url: &str, ref_str: Option<&str>) -> Result<String> {
 
     if stdout.is_empty() {
         // Fallback to HEAD if ref returned nothing
-        let fallback_res = run_command(&["git", "ls-remote", url, "HEAD"], None, false, true, true);
+        let fallback_res = run_command(["git", "ls-remote", url, "HEAD"], None, false, true, true);
         if let Ok(out) = fallback_res {
             stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
         }
