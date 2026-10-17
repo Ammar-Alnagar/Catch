@@ -122,3 +122,116 @@ double compute_circumference(double radius);
     assert!(doc.contains("```cpp\ndouble compute_circumference(double radius)\n```"));
     assert!(doc.contains("*Doc*: Compute circumference given radius"));
 }
+
+#[test]
+fn test_cuda_cutlass_kernel_symbol_extraction() {
+    let tmp = TempDir::new().unwrap();
+    let proj_dir = tmp.path();
+
+    let toml = r#"
+[package]
+name = "ker"
+version = "0.1.0"
+type = "bin"
+
+[build]
+std = "20"
+languages = ["CXX", "CUDA"]
+
+[dependencies]
+cutlass = { git = "https://github.com/NVIDIA/cutlass.git" }
+"#;
+    fs::write(proj_dir.join("catch.toml"), toml).unwrap();
+
+    let src_dir = proj_dir.join("src");
+    fs::create_dir_all(&src_dir).unwrap();
+
+    let kernel_cu = r#"
+#include <cute/tensor.hpp>
+
+using namespace cute;
+
+/// Tiled GEMM kernel using CuTe abstractions.
+template <class ProblemShape, class CtaTiler,
+          class TA, class AStride, class ASmemLayout, class AThreadLayout,
+          class TB, class BStride, class BSmemLayout, class BThreadLayout,
+          class TC, class CStride, class CSmemLayout, class CThreadLayout,
+          class Alpha, class Beta>
+__global__ void
+__launch_bounds__(decltype(size(CThreadLayout{}))::value)
+gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler,
+            TA const* A, AStride dA,
+            TB const* B, BStride dB,
+            TC      * C, CStride dC,
+            Alpha alpha, Beta beta)
+{
+  CUTE_STATIC_ASSERT_V(rank(shape_MNK) == Int<3>{});
+  Tensor mA = make_tensor(make_gmem_ptr(A), select<0,2>(shape_MNK), dA);
+  auto cta_coord = make_coord(blockIdx.x, blockIdx.y, _);
+  copy(tAgA(_,_,k_tile), tAsA);
+  __syncthreads();
+  gemm(tCsA, tCsB, tCrC);
+}
+
+/// Host launcher for NT GEMM
+template <class TA, class TB, class TC, class Alpha, class Beta>
+void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C, int ldC, cudaStream_t stream)
+{
+    // body
+}
+
+int main(int argc, char** argv)
+{
+    printf("done\n");
+    return 0;
+}
+"#;
+    fs::write(src_dir.join("kernel.cu"), kernel_cu).unwrap();
+
+    // Mock cutlass in build/_deps/cutlass-src
+    let cutlass_dir = proj_dir.join("build").join("_deps").join("cutlass-src");
+    fs::create_dir_all(&cutlass_dir).unwrap();
+    let cutlass_cmake = r#"
+set(CUTLASS_VERSION_MAJOR 3)
+set(CUTLASS_VERSION_MINOR 5)
+set(CUTLASS_VERSION_PATCH 0)
+project(CUTLASS VERSION ${CUTLASS_VERSION_MAJOR}.${CUTLASS_VERSION_MINOR}.${CUTLASS_VERSION_PATCH} LANGUAGES CXX)
+"#;
+    fs::write(cutlass_dir.join("CMakeLists.txt"), cutlass_cmake).unwrap();
+    let cutlass_readme = r#"
+# CUTLASS
+
+![ALT](./media/images/gemm-hierarchy-with-epilogue-no-labels.png "Complete CUDA GEMM decomposition")
+
+CUTLASS is a collection of CUDA C++ template abstractions for implementing high-performance matrix-multiplication (GEMM).
+"#;
+    fs::write(cutlass_dir.join("README.md"), cutlass_readme).unwrap();
+
+    let doc = generate_docs(proj_dir).unwrap();
+
+    // 1. Dependency checks
+    assert!(doc.contains("**Library Version**: `3.5.0`"));
+    assert!(!doc.contains("CUTLASS_VERSION_MAJOR"));
+    assert!(doc.contains("**Description**: CUTLASS is a collection of CUDA C++ template abstractions"));
+    assert!(!doc.contains("![ALT]"));
+
+    // 2. Extracted symbol checks
+    assert!(doc.contains("- **Function** `gemm_device`"));
+    assert!(doc.contains("*Doc*: Tiled GEMM kernel using CuTe abstractions."));
+    assert!(doc.contains("- **Function** `gemm_nt`"));
+    assert!(doc.contains("*Doc*: Host launcher for NT GEMM"));
+    assert!(doc.contains("- **Function** `main`"));
+
+    // False classes from template parameters MUST NOT be present
+    assert!(!doc.contains("- **Class** `ProblemShape`"));
+    assert!(!doc.contains("- **Class** `CtaTiler`"));
+    assert!(!doc.contains("- **Class** `TA`"));
+    assert!(!doc.contains("- **Class** `Alpha`"));
+
+    // False functions from calls inside kernel body MUST NOT be present
+    assert!(!doc.contains("- **Function** `make_tensor`"));
+    assert!(!doc.contains("- **Function** `make_coord`"));
+    assert!(!doc.contains("- **Function** `__syncthreads`"));
+    assert!(!doc.contains("- **Function** `CUTE_STATIC_ASSERT_V`"));
+    assert!(!doc.contains("- **Function** `printf`"));
+}

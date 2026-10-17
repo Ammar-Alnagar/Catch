@@ -118,7 +118,10 @@ pub fn detect_lib_description(dir: &Path) -> (Option<String>, Option<String>) {
                         let after_v = &line[v_idx + 7..];
                         if let Some(v) = after_v.split_whitespace().next() {
                             let clean_v = v.trim_matches(|c: char| !c.is_alphanumeric() && c != '.');
-                            if !clean_v.is_empty() {
+                            if !clean_v.is_empty()
+                                && clean_v.chars().any(|c| c.is_ascii_digit())
+                                && !clean_v.chars().any(|c| c.is_alphabetic())
+                            {
                                 version = Some(clean_v.to_string());
                             }
                         }
@@ -136,6 +139,46 @@ pub fn detect_lib_description(dir: &Path) -> (Option<String>, Option<String>) {
                     }
                 }
             }
+
+            // Fallback for version variables like set(CUTLASS_VERSION_MAJOR 3)
+            if version.is_none() {
+                let mut major = None;
+                let mut minor = None;
+                let mut patch = None;
+
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    let upper = trimmed.to_uppercase();
+                    if upper.starts_with("SET(") || upper.starts_with("SET (") {
+                        let parts: Vec<&str> = trimmed
+                            .trim_start_matches(|c: char| c.is_alphabetic() || c.is_whitespace() || c == '(')
+                            .trim_end_matches(')')
+                            .split_whitespace()
+                            .collect();
+                        if parts.len() >= 2 {
+                            let var_name = parts[0].to_uppercase();
+                            let var_val = parts[1].trim_matches('"');
+                            if var_val.chars().all(|c| c.is_ascii_digit()) {
+                                if var_name.ends_with("VERSION_MAJOR") {
+                                    major = Some(var_val.to_string());
+                                } else if var_name.ends_with("VERSION_MINOR") {
+                                    minor = Some(var_val.to_string());
+                                } else if var_name.ends_with("VERSION_PATCH") {
+                                    patch = Some(var_val.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let (Some(maj), Some(min)) = (major, minor) {
+                    if let Some(pat) = patch {
+                        version = Some(format!("{}.{}.{}", maj, min, pat));
+                    } else {
+                        version = Some(format!("{}.{}", maj, min));
+                    }
+                }
+            }
         }
     }
 
@@ -147,14 +190,21 @@ pub fn detect_lib_description(dir: &Path) -> (Option<String>, Option<String>) {
                 if let Ok(content) = std::fs::read_to_string(&readme_file) {
                     for line in content.lines() {
                         let trimmed = line.trim();
-                        if !trimmed.is_empty()
-                            && !trimmed.starts_with('#')
-                            && !trimmed.starts_with('[')
-                            && !trimmed.starts_with("```")
+                        if trimmed.is_empty()
+                            || trimmed.starts_with('#')
+                            || trimmed.starts_with("![")
+                            || trimmed.starts_with("[![")
+                            || trimmed.starts_with('<')
+                            || trimmed.starts_with("<!--")
+                            || trimmed.starts_with("```")
+                            || trimmed.contains("shields.io")
+                            || trimmed.contains("badge")
+                            || trimmed.chars().all(|c| !c.is_alphabetic())
                         {
-                            description = Some(trimmed.to_string());
-                            break;
+                            continue;
                         }
+                        description = Some(trimmed.to_string());
+                        break;
                     }
                 }
             }
@@ -258,62 +308,302 @@ pub fn find_built_target_info(
     None
 }
 
-fn extract_type_symbol(line: &str, line_num: usize, doc_lines: &[String]) -> Option<CodeSymbol> {
-    if line.ends_with(';') && !line.contains('{') {
+fn strip_inline_comments(line: &str) -> String {
+    let mut out = String::new();
+    let mut in_str = false;
+    let mut str_char = ' ';
+    let mut escaped = false;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        let ch = chars[i];
+        if in_str {
+            out.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == str_char {
+                in_str = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if ch == '"' || ch == '\'' {
+            in_str = true;
+            str_char = ch;
+            out.push(ch);
+            i += 1;
+            continue;
+        }
+
+        if ch == '/' && i + 1 < chars.len() && chars[i + 1] == '/' {
+            break;
+        }
+
+        out.push(ch);
+        i += 1;
+    }
+    out
+}
+
+fn count_braces_outside_strings(s: &str) -> (usize, usize) {
+    let mut opens = 0;
+    let mut closes = 0;
+    let mut in_str = false;
+    let mut str_char = ' ';
+    let mut escaped = false;
+
+    for ch in s.chars() {
+        if in_str {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == str_char {
+                in_str = false;
+            }
+            continue;
+        }
+
+        if ch == '"' || ch == '\'' {
+            in_str = true;
+            str_char = ch;
+            continue;
+        }
+
+        if ch == '{' {
+            opens += 1;
+        } else if ch == '}' {
+            closes += 1;
+        }
+    }
+
+    (opens, closes)
+}
+
+fn normalize_spaces(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn find_declaration_delimiter(decl: &str) -> Option<(char, usize)> {
+    let mut angle_depth: usize = 0;
+    let mut paren_depth: usize = 0;
+    let mut in_str = false;
+    let mut str_char = ' ';
+    let mut escaped = false;
+
+    for (idx, ch) in decl.char_indices() {
+        if in_str {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == str_char {
+                in_str = false;
+            }
+            continue;
+        }
+
+        if ch == '"' || ch == '\'' {
+            in_str = true;
+            str_char = ch;
+            continue;
+        }
+
+        match ch {
+            '<' => angle_depth += 1,
+            '>' => {
+                angle_depth = angle_depth.saturating_sub(1);
+            }
+            '(' => paren_depth += 1,
+            ')' => {
+                paren_depth = paren_depth.saturating_sub(1);
+            }
+            '{' | ';' if angle_depth == 0 && paren_depth == 0 => {
+                return Some((ch, idx));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn strip_template_prefix(s: &str) -> &str {
+    if !s.starts_with("template") {
+        return s;
+    }
+    let rest = s["template".len()..].trim_start();
+    if !rest.starts_with('<') {
+        return s;
+    }
+    let mut depth = 0;
+    for (i, ch) in rest.char_indices() {
+        if ch == '<' {
+            depth += 1;
+        } else if ch == '>' {
+            depth -= 1;
+            if depth == 0 {
+                return rest[i + 1..].trim_start();
+            }
+        }
+    }
+    s
+}
+
+fn parse_class_or_struct(s: &str) -> Option<(SymbolKind, String)> {
+    let tokens: Vec<&str> = s.split_whitespace().collect();
+    if tokens.is_empty() {
         return None;
     }
 
-    let tokens: Vec<&str> = line.split_whitespace().collect();
-    for (i, &tok) in tokens.iter().enumerate() {
-        if (tok == "class" || tok == "struct") && i + 1 < tokens.len() {
-            let next_tok = tokens[i + 1].trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-            if !next_tok.is_empty() && next_tok != "alignas" {
-                let kind = if tok == "class" {
-                    SymbolKind::Class
-                } else {
-                    SymbolKind::Struct
-                };
-                let doc = if doc_lines.is_empty() {
-                    None
-                } else {
-                    Some(doc_lines.join(" "))
-                };
-                let sig = line.trim_end_matches('{').trim().to_string();
-                return Some(CodeSymbol {
-                    kind,
-                    name: next_tok.to_string(),
-                    signature: sig,
-                    line: line_num,
-                    doc,
-                });
+    if tokens[0] == "class" || tokens[0] == "struct" {
+        let kind = if tokens[0] == "class" {
+            SymbolKind::Class
+        } else {
+            SymbolKind::Struct
+        };
+        if tokens.len() >= 2 {
+            let name = tokens[1].trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
+            if !name.is_empty() && name != "alignas" {
+                return Some((kind, name.to_string()));
             }
-        } else if tok == "enum" && i + 1 < tokens.len() {
-            let next_idx = if tokens[i + 1] == "class" || tokens[i + 1] == "struct" {
-                i + 2
-            } else {
-                i + 1
-            };
-            if next_idx < tokens.len() {
-                let name = tokens[next_idx].trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-                if !name.is_empty() {
-                    let doc = if doc_lines.is_empty() {
-                        None
-                    } else {
-                        Some(doc_lines.join(" "))
-                    };
-                    let sig = line.trim_end_matches('{').trim().to_string();
-                    return Some(CodeSymbol {
-                        kind: SymbolKind::Enum,
-                        name: name.to_string(),
-                        signature: sig,
-                        line: line_num,
-                        doc,
-                    });
+        }
+    } else if tokens[0] == "enum" {
+        let next_idx = if tokens.len() >= 2 && (tokens[1] == "class" || tokens[1] == "struct") {
+            2
+        } else {
+            1
+        };
+        if tokens.len() > next_idx {
+            let name = tokens[next_idx].trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
+            if !name.is_empty() {
+                return Some((SymbolKind::Enum, name.to_string()));
+            }
+        }
+    }
+    None
+}
+
+fn extract_func_name_from_header(s: &str) -> Option<String> {
+    if !s.contains('(') || !s.contains(')') {
+        return None;
+    }
+
+    if let Some(eq_idx) = s.find('=') {
+        let first_paren = s.find('(').unwrap();
+        if eq_idx < first_paren {
+            return None;
+        }
+    }
+
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    let mut has_prefix = false;
+
+    while i < chars.len() {
+        if chars[i].is_alphabetic() || chars[i] == '_' || chars[i] == '~' {
+            let start = i;
+            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == ':') {
+                i += 1;
+            }
+            let word: String = chars[start..i].iter().collect();
+
+            let mut j = i;
+            while j < chars.len() && chars[j].is_whitespace() {
+                j += 1;
+            }
+
+            if j < chars.len() && chars[j] == '(' {
+                const ATTR_OR_CONTROL: &[&str] = &[
+                    "__launch_bounds__",
+                    "__attribute__",
+                    "alignas",
+                    "decltype",
+                    "sizeof",
+                    "if",
+                    "while",
+                    "for",
+                    "switch",
+                    "catch",
+                    "return",
+                    "throw",
+                    "static_assert",
+                ];
+
+                let clean_word = word.split("::").last().unwrap_or(&word);
+                if ATTR_OR_CONTROL.contains(&clean_word) {
+                    let mut paren_count = 1;
+                    j += 1;
+                    while j < chars.len() && paren_count > 0 {
+                        if chars[j] == '(' {
+                            paren_count += 1;
+                        } else if chars[j] == ')' {
+                            paren_count -= 1;
+                        }
+                        j += 1;
+                    }
+                    i = j;
+                    has_prefix = true;
+                    continue;
                 }
+
+                // If word is all uppercase and at the very beginning of the declaration without a return type, it's a macro
+                if !has_prefix && word.chars().all(|c| c.is_uppercase() || c == '_') {
+                    return None;
+                }
+
+                return Some(word);
+            } else {
+                has_prefix = true;
             }
-        } else if tok == "namespace" && i + 1 < tokens.len() {
-            let name = tokens[i + 1].trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != ':');
-            if !name.is_empty() && name != "{" {
+        }
+        i += 1;
+    }
+
+    None
+}
+
+fn parse_top_level_symbol(
+    decl_header: &str,
+    line_num: usize,
+    doc_lines: &[String],
+) -> Option<CodeSymbol> {
+    let normalized = normalize_spaces(decl_header);
+    if normalized.is_empty() {
+        return None;
+    }
+
+    if normalized.starts_with("using ") || normalized.starts_with("typedef ") {
+        return None;
+    }
+
+    let after_template = strip_template_prefix(&normalized);
+
+    // 1. Check Class / Struct / Enum
+    if let Some((kind, name)) = parse_class_or_struct(after_template) {
+        let doc = if doc_lines.is_empty() {
+            None
+        } else {
+            Some(doc_lines.join(" "))
+        };
+        return Some(CodeSymbol {
+            kind,
+            name,
+            signature: normalized,
+            line: line_num,
+            doc,
+        });
+    }
+
+    // 2. Check Namespace
+    if after_template.starts_with("namespace ") {
+        let tokens: Vec<&str> = after_template.split_whitespace().collect();
+        if tokens.len() >= 2 && tokens[1] != "{" {
+            let name = tokens[1].trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
+            if !name.is_empty() {
                 let doc = if doc_lines.is_empty() {
                     None
                 } else {
@@ -328,59 +618,26 @@ fn extract_type_symbol(line: &str, line_num: usize, doc_lines: &[String]) -> Opt
                 });
             }
         }
+        return None;
     }
+
+    // 3. Check Function
+    if let Some(func_name) = extract_func_name_from_header(after_template) {
+        let doc = if doc_lines.is_empty() {
+            None
+        } else {
+            Some(doc_lines.join(" "))
+        };
+        return Some(CodeSymbol {
+            kind: SymbolKind::Function,
+            name: func_name,
+            signature: normalized,
+            line: line_num,
+            doc,
+        });
+    }
+
     None
-}
-
-fn extract_function_symbol(
-    line: &str,
-    line_num: usize,
-    doc_lines: &[String],
-) -> Option<CodeSymbol> {
-    if line.trim_start().starts_with('#') {
-        return None;
-    }
-
-    let open_paren = line.find('(')?;
-    let close_paren = line.rfind(')')?;
-    if close_paren <= open_paren {
-        return None;
-    }
-
-    let prefix = line[..open_paren].trim();
-    if prefix.is_empty() {
-        return None;
-    }
-
-    let last_word = prefix
-        .split(|c: char| !c.is_alphanumeric() && c != '_' && c != ':')
-        .rfind(|s| !s.is_empty())?;
-
-    const KEYWORDS: &[&str] = &[
-        "if", "else", "while", "for", "do", "switch", "catch", "case", "return", "sizeof",
-        "decltype", "alignas", "static_assert", "typeid", "new", "delete", "throw",
-    ];
-
-    if KEYWORDS.contains(&last_word) {
-        return None;
-    }
-
-    let sig_end = line.find('{').unwrap_or(line.len());
-    let sig = line[..sig_end].trim().trim_end_matches(';').trim().to_string();
-
-    let doc = if doc_lines.is_empty() {
-        None
-    } else {
-        Some(doc_lines.join(" "))
-    };
-
-    Some(CodeSymbol {
-        kind: SymbolKind::Function,
-        name: last_word.to_string(),
-        signature: sig,
-        line: line_num,
-        doc,
-    })
 }
 
 pub fn analyze_source_file(project_dir: &Path, rel_path: &Path) -> Option<FileMetrics> {
@@ -393,10 +650,16 @@ pub fn analyze_source_file(project_dir: &Path, rel_path: &Path) -> Option<FileMe
     let mut code_lines = 0;
     let mut comment_lines = 0;
     let mut blank_lines = 0;
-    let mut in_block_comment = false;
 
+    let mut in_block_comment = false;
     let mut pending_doc: Vec<String> = Vec::new();
     let mut symbols = Vec::new();
+
+    let mut in_function_body = false;
+    let mut function_brace_depth: usize = 0;
+
+    let mut curr_decl = String::new();
+    let mut decl_start_line = 0;
 
     let lines: Vec<&str> = content.lines().collect();
 
@@ -407,16 +670,20 @@ pub fn analyze_source_file(project_dir: &Path, rel_path: &Path) -> Option<FileMe
 
         if trimmed.is_empty() {
             blank_lines += 1;
-            pending_doc.clear();
+            if !in_function_body && curr_decl.trim().is_empty() {
+                pending_doc.clear();
+            }
             continue;
         }
 
         if in_block_comment {
             comment_lines += 1;
-            if let Some(doc_text) = trimmed.strip_prefix('*') {
-                let clean = doc_text.trim();
-                if !clean.is_empty() && clean != "/" {
-                    pending_doc.push(clean.to_string());
+            if !in_function_body {
+                if let Some(doc_text) = trimmed.strip_prefix('*') {
+                    let clean = doc_text.trim();
+                    if !clean.is_empty() && clean != "/" {
+                        pending_doc.push(clean.to_string());
+                    }
                 }
             }
             if trimmed.contains("*/") {
@@ -430,10 +697,12 @@ pub fn analyze_source_file(project_dir: &Path, rel_path: &Path) -> Option<FileMe
             if !trimmed.contains("*/") {
                 in_block_comment = true;
             }
-            if let Some(doc_text) = trimmed.strip_prefix("/**").or_else(|| trimmed.strip_prefix("/*")) {
-                let clean = doc_text.trim_end_matches("*/").trim();
-                if !clean.is_empty() {
-                    pending_doc.push(clean.to_string());
+            if !in_function_body {
+                if let Some(doc_text) = trimmed.strip_prefix("/**").or_else(|| trimmed.strip_prefix("/*")) {
+                    let clean = doc_text.trim_end_matches("*/").trim();
+                    if !clean.is_empty() {
+                        pending_doc.push(clean.to_string());
+                    }
                 }
             }
             continue;
@@ -441,32 +710,83 @@ pub fn analyze_source_file(project_dir: &Path, rel_path: &Path) -> Option<FileMe
 
         if trimmed.starts_with("//") {
             comment_lines += 1;
-            let doc_text = trimmed
-                .strip_prefix("///")
-                .unwrap_or_else(|| trimmed.strip_prefix("//").unwrap_or(""));
-            let clean = doc_text.trim();
-            if !clean.is_empty() {
-                pending_doc.push(clean.to_string());
+            if !in_function_body && curr_decl.trim().is_empty() {
+                let doc_text = trimmed
+                    .strip_prefix("///")
+                    .unwrap_or_else(|| trimmed.strip_prefix("//").unwrap_or(""));
+                let clean = doc_text.trim();
+                if !clean.is_empty() {
+                    pending_doc.push(clean.to_string());
+                }
             }
             continue;
         }
 
         code_lines += 1;
 
-        if let Some(sym) = extract_type_symbol(trimmed, line_num, &pending_doc) {
-            symbols.push(sym);
-            pending_doc.clear();
+        let stripped_code = strip_inline_comments(trimmed);
+        if stripped_code.trim().is_empty() {
             continue;
         }
 
-        if let Some(sym) = extract_function_symbol(trimmed, line_num, &pending_doc) {
-            symbols.push(sym);
-            pending_doc.clear();
+        if in_function_body {
+            let (opens, closes) = count_braces_outside_strings(&stripped_code);
+            function_brace_depth += opens;
+            if function_brace_depth <= closes {
+                function_brace_depth = 0;
+                in_function_body = false;
+                curr_decl.clear();
+                pending_doc.clear();
+            } else {
+                function_brace_depth -= closes;
+            }
             continue;
         }
 
-        if !trimmed.starts_with('#') && !trimmed.starts_with('{') && !trimmed.starts_with('}') {
-            pending_doc.clear();
+        if stripped_code.trim_start().starts_with('#') {
+            continue;
+        }
+
+        if curr_decl.trim().is_empty() {
+            decl_start_line = line_num;
+        }
+        if !curr_decl.is_empty() {
+            curr_decl.push(' ');
+        }
+        curr_decl.push_str(stripped_code.trim());
+
+        if let Some((delimiter, split_idx)) = find_declaration_delimiter(&curr_decl) {
+            let decl_header = curr_decl[..split_idx].trim().to_string();
+
+            if delimiter == '{' {
+                if let Some(sym) = parse_top_level_symbol(&decl_header, decl_start_line, &pending_doc) {
+                    let is_func = sym.kind == SymbolKind::Function;
+                    symbols.push(sym);
+                    pending_doc.clear();
+
+                    if is_func {
+                        in_function_body = true;
+                        function_brace_depth = 1;
+
+                        let rest = &curr_decl[split_idx + 1..];
+                        let (extra_opens, extra_closes) = count_braces_outside_strings(rest);
+                        function_brace_depth += extra_opens;
+                        if function_brace_depth <= extra_closes {
+                            function_brace_depth = 0;
+                            in_function_body = false;
+                        } else {
+                            function_brace_depth -= extra_closes;
+                        }
+                    }
+                }
+            } else if delimiter == ';' {
+                if let Some(sym) = parse_top_level_symbol(&decl_header, decl_start_line, &pending_doc) {
+                    symbols.push(sym);
+                    pending_doc.clear();
+                }
+            }
+
+            curr_decl.clear();
         }
     }
 
