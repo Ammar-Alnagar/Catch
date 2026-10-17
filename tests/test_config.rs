@@ -40,7 +40,7 @@ components = ["Support"]
     assert_eq!(cfg.dependencies["fmt"].target.as_deref(), Some("fmt::fmt"));
     assert!(cfg.cuda.is_some());
     assert!(cfg.llvm.is_some());
-    assert_eq!(cfg.llvm.as_ref().unwrap().mlir, true);
+    assert!(cfg.llvm.as_ref().unwrap().mlir);
 }
 
 #[test]
