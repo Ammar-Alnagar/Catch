@@ -5,9 +5,9 @@ type = "bin"
 
 [build]
 std = "20"
-flags = []
+flags = ["-O3", "-DNDEBUG"]
 defines = []
-release_flags = ["-O2"]
+release_flags = ["-O3", "-DNDEBUG"]
 languages = {languages}
 {cuda_section}{llvm_section}"#;
 

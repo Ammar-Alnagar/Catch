@@ -39,7 +39,7 @@ fn default_std() -> String {
 }
 
 fn default_release_flags() -> Vec<String> {
-    vec!["-O2".to_string()]
+    vec!["-O3".to_string(), "-DNDEBUG".to_string()]
 }
 
 fn default_languages() -> Vec<String> {

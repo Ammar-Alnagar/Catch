@@ -17,6 +17,12 @@ pub fn generate_cmakelists(config: &CatchConfig, project_dir: &Path, lock_data: 
     lines.push("".to_string());
 
     lines.push("set(CMAKE_EXPORT_COMPILE_COMMANDS ON)".to_string());
+
+    // Ccache setup if installed
+    lines.push("find_program(CCACHE_PROGRAM ccache)".to_string());
+    lines.push("if(CCACHE_PROGRAM)\n  set(CMAKE_C_COMPILER_LAUNCHER \"${CCACHE_PROGRAM}\")\n  set(CMAKE_CXX_COMPILER_LAUNCHER \"${CCACHE_PROGRAM}\")\n  set(CMAKE_CUDA_COMPILER_LAUNCHER \"${CCACHE_PROGRAM}\")\nendif()".to_string());
+    lines.push("".to_string());
+
     if config.build.languages.contains(&"CXX".to_string()) {
         lines.push(format!("set(CMAKE_CXX_STANDARD {})", config.build.std));
         lines.push("set(CMAKE_CXX_STANDARD_REQUIRED ON)".to_string());
