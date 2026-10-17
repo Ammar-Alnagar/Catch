@@ -118,6 +118,19 @@ pub fn generate_cmakelists(config: &CatchConfig, project_dir: &Path, lock_data: 
                 .or(dep.rev.as_deref())
                 .unwrap_or("HEAD");
 
+            // Disable tests & benchmarks for fetched third-party dependencies by default
+            lines.push("set(BUILD_TESTING OFF CACHE BOOL \"\" FORCE)".to_string());
+            lines.push("set(BUILD_EXAMPLES OFF CACHE BOOL \"\" FORCE)".to_string());
+            lines.push("set(BUILD_TESTS OFF CACHE BOOL \"\" FORCE)".to_string());
+
+            // Dependency-specific automatic fixes (e.g. CUTLASS)
+            if dep_name.to_lowercase() == "cutlass" || dep.git.to_lowercase().contains("cutlass") {
+                lines.push("set(CUTLASS_ENABLE_HEADERS_ONLY ON CACHE BOOL \"\" FORCE)".to_string());
+                lines.push("set(CUTLASS_ENABLE_TESTS OFF CACHE BOOL \"\" FORCE)".to_string());
+                lines.push("set(CUTLASS_ENABLE_EXAMPLES OFF CACHE BOOL \"\" FORCE)".to_string());
+                lines.push("set(CUTLASS_ENABLE_TOOLS OFF CACHE BOOL \"\" FORCE)".to_string());
+            }
+
             lines.push(format!(
                 "FetchContent_Declare(\n  {}\n  GIT_REPOSITORY {}\n  GIT_TAG {}\n)",
                 dep_name, dep.git, tag_to_use
